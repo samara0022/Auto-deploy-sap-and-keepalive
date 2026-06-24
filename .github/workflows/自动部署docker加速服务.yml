@@ -1,17 +1,17 @@
-name: 删除指定区域所有SAP应用
+name: 自动部署docker加速服务到SAP
 
 on:
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:  # 只允许手动触发
     inputs:
       region:
-        description: '选择要删除应用的区域'
+        description: '选择部署区域'
         required: true
-        default: 'SG(free)'
+        default: 'US(free)'
         type: choice
         options:
-          # 免费区域
-          - SG(free)  # azure新加坡
-          - US(free)  # aws美国  
+          #  免费区域
+          - SG(free)  # azure新加披
+          - US(free)  # aws美国 
           # SAP 区域
           - SAP-UAE(Dubai)
           - SAP-AU(Sydney)
@@ -50,24 +50,21 @@ on:
           # SAP Neo 区域
           - Neo-UAE(Dubai)
           - Neo-KSA(Riyadh)
-      confirmation:
-        description: '请输入 "确认删除" 以确认操作'
-        required: true
-        type: string
+      app_name:
+        description: '应用名称（可选，留空则自动生成）'
+        required: false
+        default: ''
+
+env:
+  DOCKER_IMAGE: ${{ secrets.DOCKER_IMAGE || 'ghcr.io/eooce/hubproxy:latest' }}
+  MEMORY: ${{ secrets.MEMORY || '256M' }}
+  DISK: ${{ secrets.DISK || '256M' }}
 
 jobs:
-  delete-apps:
+  deploy-app:
     runs-on: ubuntu-latest
-    name: Delete Apps from ${{ github.event.inputs.region }}
-    
-    steps:
-    - name: 验证确认短语
-      run: |
-        if [ "${{ github.event.inputs.confirmation }}" != "确认删除" ]; then
-          echo "错误：必须输入 '确认删除' 来确认操作"
-          exit 1
-        fi
 
+    steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
@@ -78,17 +75,21 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y cf8-cli
 
-    - name: Set API endpoint
+    - name: Determine CF API endpoint and app name
       run: |
+        # 设置API端点和生成随机字符串
+        RANDOM_STR=$(head /dev/urandom | tr -dc 'a-z' | head -c 6)
+        
         case "${{ github.event.inputs.region }}" in
           # 免费区域
           "SG(free)")
             echo "CF_API=https://api.cf.ap21.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-freesg$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "US(free)")
             echo "CF_API=https://api.cf.us10-001.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-freeus$RANDOM_STR" >> $GITHUB_ENV
             ;;
-            
           # SAP 区域
           "SAP-UAE(Dubai)")
             echo "CF_API=https://api.cf.ae01.hana.ondemand.com" >> $GITHUB_ENV
@@ -110,176 +111,187 @@ jobs:
             echo "CF_API=https://api.cf.jp01.hana.ondemand.com" >> $GITHUB_ENV
             echo "APP_NAME=sap-jp$RANDOM_STR" >> $GITHUB_ENV
             ;;
-            
           # AWS 区域
           "AWS-AU(Sydney)")
             echo "CF_API=https://api.cf.ap10.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-awsau$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "AWS-BR(São Paulo)")
             echo "CF_API=https://api.cf.br10.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-awsbr$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "AWS-KR(Seoul)")
             echo "CF_API=https://api.cf.ap12.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-awskr$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "AWS-CA(Montreal)")
             echo "CF_API=https://api.cf.ca10.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-awsca$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "AWS-US(VA)")
             echo "CF_API=https://api.cf.us10-001.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-awsusva$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "AWS-US(OR)")
             echo "CF_API=https://api.cf.us11.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-awsusor$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "AWS-EU(Frankfurt)")
             echo "CF_API=https://api.cf.eu10-005.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-waseu$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "AWS-JP(Tokyo)")
             echo "CF_API=https://api.cf.jp10.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-awsjp$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "AWS-SG(Singapore)")
             echo "CF_API=https://api.cf.ap11.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-awssg$RANDOM_STR" >> $GITHUB_ENV
             ;;
           
           # GCP 区域
           "GCP-AU(Sydney)")
             echo "CF_API=https://api.cf.ap30.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-gcpau$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "GCP-BR(São Paulo)")
             echo "CF_API=https://api.cf.br30.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-gcpbr$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "GCP-US(IA)")
             echo "CF_API=https://api.cf.us30.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-gcpus$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "GCP-EU(Frankfurt)")
             echo "CF_API=https://api.cf.eu30.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-gcpeu$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "GCP-JP(Osaka)")
             echo "CF_API=https://api.cf.jp30.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-gcpjpo$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "GCP-JP(Tokyo)")
             echo "CF_API=https://api.cf.jp31.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-gcpjpt$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "GCP-IL(Tel Aviv)")
             echo "CF_API=https://api.cf.il30.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-gcpil$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "GCP-IN(Mumbai)")
             echo "CF_API=https://api.cf.in30.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-gcpin$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "GCP-KSA(Dammam)")
             echo "CF_API=https://api.cf.sa31.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-gcpsa$RANDOM_STR" >> $GITHUB_ENV
             ;;
           
           # Azure 区域
           "Azure-AU(Sydney)")
             echo "CF_API=https://api.cf.ap20.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-azau$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "Azure-BR(São Paulo)")
             echo "CF_API=https://api.cf.br20.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-azbr$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "Azure-CA(Montreal)")
             echo "CF_API=https://api.cf.ca20.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-azca$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "Azure-US(VA)")
             echo "CF_API=https://api.cf.us21.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-azva$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "Azure-US(WA)")
             echo "CF_API=https://api.cf.us20.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-azwa$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "Azure-EU(Netherlands)")
-            echo "CF_API=https://api.cf.eu20.hana.ondemand.com" >> $GITHUB_ENV
+            echo "CF_API=https://api.cf.eu20-001.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-azeu$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "Azure-JP(Tokyo)")
             echo "CF_API=https://api.cf.jp20.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-azjp$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "Azure-SG(Singapore)")
             echo "CF_API=https://api.cf.ap21.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-azsg$RANDOM_STR" >> $GITHUB_ENV
             ;;
           
           # SAP Neo 区域
           "Neo-UAE(Dubai)")
             echo "CF_API=https://api.cf.neo-ae1.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-neouae$RANDOM_STR" >> $GITHUB_ENV
             ;;
           "Neo-KSA(Riyadh)")
             echo "CF_API=https://api.cf.neo-sa1.hana.ondemand.com" >> $GITHUB_ENV
+            echo "APP_NAME=ghproxy-neoksa$RANDOM_STR" >> $GITHUB_ENV
             ;;
         esac
+        
+        # 如果用户提供了应用名称，则使用用户提供的
+        if [ -n "${{ github.event.inputs.app_name }}" ]; then
+          echo "APP_NAME=${{ github.event.inputs.app_name }}" >> $GITHUB_ENV
+        fi
+        
+        echo "使用API端点: $CF_API"
+        echo "应用名称: $APP_NAME"
+        echo "部署类型: ${{ env.DOCKER_IMAGE }}"
 
-    - name: 基础登录到Cloud Foundry
+    - name: Login to Cloud Foundry
       run: |
-        # 基础登录（不带组织和空间）
         cf login -a ${{ env.CF_API }} -u "${{ secrets.EMAIL }}" -p "${{ secrets.PASSWORD }}"
 
-    - name: 获取组织和空间
-      run: |
         # 获取组织列表
         ORG=$(cf orgs | sed -n '4p')
-        echo "获取到的组织: $ORG"
-        if [ -z "$ORG" ]; then
-          echo "错误：未找到任何组织"
-          exit 1
-        fi
+        echo "Selected org: $ORG"
         echo "ORG=$ORG" >> $GITHUB_ENV
 
         # 获取空间列表
         SPACE=$(cf spaces | sed -n '4p')
-        echo "获取到的空间: $SPACE"
-        if [ -z "$SPACE" ]; then
-          echo "错误：未找到任何空间"
-          exit 1
-        fi
+        echo "Selected space: $SPACE"
         echo "SPACE=$SPACE" >> $GITHUB_ENV
 
-    - name: 登录到指定组织和空间
-      run: |
         # 使用获取的组织和空间重新登录
-        cf login -a ${{ env.CF_API }} -u "${{ secrets.EMAIL }}" -p "${{ secrets.PASSWORD }}" -o "${{ env.ORG }}" -s "${{ env.SPACE }}"
+        cf login -a ${{ env.CF_API }} -u "${{ secrets.EMAIL }}" -p "${{ secrets.PASSWORD }}" -o "$ORG" -s "$SPACE"
 
-    - name: 获取所有应用
-      id: get-apps
+    - name: Deploy application
       run: |
-        # 获取所有应用名称（使用你的方法）
-        apps=$(cf apps | tail -n +4 | awk '{print $1}' | grep -v '^$')
-        echo "发现的应用:"
-        echo "$apps"
-        
-        # 检查是否有应用
-        if [ -z "$apps" ]; then
-          echo "在区域 ${{ github.event.inputs.region }} 中未找到任何应用"
-          echo "has_apps=false" >> $GITHUB_OUTPUT
-          exit 0
+        if cf push ${{ env.APP_NAME }} --docker-image ${{ env.DOCKER_IMAGE }} -m ${{ env.MEMORY }} -k ${{ env.DISK }} --health-check-type port; then
+          echo "Deployment successful"
         else
-          echo "has_apps=true" >> $GITHUB_OUTPUT
+          cf delete ${{ env.APP_NAME }} -r -f
+          echo "伙计,没资源了,部署失败,请明天早上8:10至9:00再尝试部署,已清理失败部署残留"
+          exit 1
         fi
         
-        # 直接输出到 GITHUB_OUTPUT（多行字符串）
-        delimiter="EOF_$(date +%s)"
-        echo "apps<<$delimiter" >> $GITHUB_OUTPUT
-        echo "$apps" >> $GITHUB_OUTPUT
-        echo "$delimiter" >> $GITHUB_OUTPUT
-
-    - name: 删除所有应用
-      if: steps.get-apps.outputs.has_apps == 'true'
+    - name: Verify deployment
       run: |
-        # 从上一步获取应用列表
-        apps="${{ steps.get-apps.outputs.apps }}"
+        STATUS=$(cf app ${{ env.APP_NAME }} | grep "requested state:" | awk '{print $3}')
+        if [ "$STATUS" = "started" ]; then
+          echo "✅ ghproxy启动成功"
+        else
+          echo "❌ 应用启动失败，当前状态: $STATUS"
+          echo "查看应用日志:"
+          cf logs ${{ env.APP_NAME }} --recent
+          exit 1
+        fi
         
-        echo "正在删除区域 ${{ github.event.inputs.region }} 中的应用:"
-        echo "$apps"
-        
-        # 删除每个应用
-        for app in $apps; do
-          echo "正在删除应用: $app"
-          cf delete -f -r "$app"  # -f 强制删除，不需要确认；-r 同时删除关联的路由
-          if [ $? -eq 0 ]; then
-            echo "应用 $app 删除成功"
-          else
-            echo "应用 $app 删除失败，继续下一个应用"
-          fi
-          echo "----------------------------------------"
-          sleep 5  # 每个应用之间等待 5 秒
-        done
-
-    - name: 验证应用已删除
+    - name: 详细部署信息
       run: |
-        echo "区域 ${{ github.event.inputs.region }} 中剩余的应用:"
-        cf apps || echo "获取应用列表失败，可能已经没有应用"
+        echo "🚀 部署完成！详细信息如下："
+        echo "区域(Region): ${{ github.event.inputs.region }}"
+        echo "组织(ORG): ${{ env.ORG }}"
+        echo "空间(SPACE): ${{ env.SPACE }}"
+        echo "应用名称(App Name): ${{ env.APP_NAME }}"
+
+        # 获取应用路由
+        ROUTE=$(cf app ${{ env.APP_NAME }} | grep "routes:" | awk '{print $2}')
+        if [ -n "$ROUTE" ]; then
+          echo "ghproxy—url: https://$ROUTE"
+        else
+          echo "⚠️ 未找到应用路由，请检查部署状态。"
+        fi
