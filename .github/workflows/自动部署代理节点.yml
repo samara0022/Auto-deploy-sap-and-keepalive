@@ -84,7 +84,7 @@ jobs:
 
         case "${{ github.event.inputs.region }}" in
           "SG(free)")         CF_API="https://api.cf.ap21.hana.ondemand.com";    APP_NAME="free-sg$RANDOM_STR" ;;
-          "US(free)")         CF_API="https://api.cf.us10-001.hana.ondemand.com"; APP_NAME="free-us$RANDOM_STR" ;;
+          "US(free)")         CF_API="https://api.cf.us11.hana.ondemand.com"; APP_NAME="free-us$RANDOM_STR" ;;
           "SAP-UAE(Dubai)")   CF_API="https://api.cf.ae01.hana.ondemand.com";    APP_NAME="sap-ae$RANDOM_STR" ;;
           "SAP-AU(Sydney)")   CF_API="https://api.cf.ap01.hana.ondemand.com";    APP_NAME="sap-ap$RANDOM_STR" ;;
           "SAP-US(Sterling)") CF_API="https://api.cf.us01.hana.ondemand.com";    APP_NAME="sap-us1$RANDOM_STR" ;;
