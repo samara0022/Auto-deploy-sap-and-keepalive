@@ -1,0 +1,79 @@
+﻿name: SAP Singapore Argo check
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 */6 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: sap-sg-keepalive
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CF_API: https://api.cf.ap21.hana.ondemand.com
+      CF_ORG: 8530004ftrial
+      CF_ORG_ID: 21914c30-2004-41b8-b8dd-766d6a07244c
+      CF_SPACE: dev
+      CF_APP: ${{ vars.SG_APP || 'free-sgneouvx' }}
+      CF_USERNAME: ${{ secrets.EMAIL }}
+      CF_PASSWORD: ${{ secrets.PASSWORD }}
+    steps:
+      - name: Check credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$CF_USERNAME" || -z "$CF_PASSWORD" ]]; then
+            echo '::error::Configure CF_USERNAME and CF_PASSWORD in repository Actions secrets.'
+            exit 1
+          fi
+      - name: Install CF CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 'https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github' -o "$RUNNER_TEMP/cf.tgz"
+          mkdir -p "$RUNNER_TEMP/cf-bin"
+          tar -xzf "$RUNNER_TEMP/cf.tgz" -C "$RUNNER_TEMP/cf-bin"
+          echo "$RUNNER_TEMP/cf-bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/cf-bin/cf" version
+      - name: Authenticate and check applications
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'cf logout >/dev/null 2>&1 || true' EXIT
+          cf api "$CF_API"
+          cf auth
+          cf target -o "$CF_ORG"
+          actual_org=$(cf org "$CF_ORG" --guid)
+          [[ "$actual_org" == "$CF_ORG_ID" ]] || { echo '::error::Unexpected organization ID'; exit 1; }
+          if [[ -z "$CF_SPACE" ]]; then
+            spaces=$(cf curl "/v3/spaces?organization_guids=$CF_ORG_ID&per_page=5000")
+            [[ $(jq '.resources | length' <<< "$spaces") == 1 ]] || { echo '::error::Set repository variable CF_SPACE to select a space.'; exit 1; }
+            CF_SPACE=$(jq -r '.resources[0].name' <<< "$spaces")
+          fi
+          cf target -s "$CF_SPACE"
+          if [[ -z "$CF_APP" ]]; then
+            cf apps
+            echo '::error::Set repository variable CF_APP to the application name shown above.'
+            exit 1
+          fi
+          app_guid=$(cf app "$CF_APP" --guid)
+          state=$(cf curl "/v3/apps/$app_guid" | jq -r '.state')
+          if [[ "$state" == STOPPED ]]; then
+            cf start "$CF_APP"
+          elif [[ "$state" != STARTED ]]; then
+            echo "::error::Unexpected app state: $state"
+            exit 1
+          fi
+          cf app "$CF_APP"
+          stats=$(cf curl "/v3/apps/$app_guid/processes/web/stats")
+          jq -e '.resources | length > 0 and all(.[]; .state == "RUNNING")' <<< "$stats" >/dev/null
+          routes=$(cf curl "/v3/apps/$app_guid/routes?per_page=5000")
+          url=$(jq -r '.resources[0].url // empty' <<< "$routes")
+          if [[ -n "$url" ]]; then
+            curl --fail --silent --show-error --max-time 45 --retry 2 "https://$url/" -o /dev/null
+          fi
+          echo 'Application process and HTTP checks passed.'
+
