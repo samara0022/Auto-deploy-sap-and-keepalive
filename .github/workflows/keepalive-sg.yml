@@ -1,8 +1,8 @@
-﻿name: SAP Singapore Argo check
+name: SAP Singapore Argo check
 on:
   workflow_dispatch:
   schedule:
-    - cron: '23 */6 * * *'
+    - cron: '7,37 * * * *'
 permissions:
   contents: read
 concurrency:
